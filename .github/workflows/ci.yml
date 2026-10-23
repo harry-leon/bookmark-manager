@@ -1,0 +1,67 @@
+name: LinkStack CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  validate:
+    name: Lint, Typecheck, Test & Production Build
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: linkstack_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/linkstack_test?schema=public"
+      NEXTAUTH_URL: "http://localhost:3000"
+      NEXTAUTH_SECRET: "ci-validation-secret-key-32-chars-long-linkstack"
+      SKIP_ENV_VALIDATION: "true"
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma Client
+        run: npx prisma generate
+
+      - name: Push Prisma Schema to Test DB
+        run: npx prisma db push --skip-generate
+
+      - name: ESLint Verification
+        run: npm run lint
+
+      - name: TypeScript Verification
+        run: npm run typecheck
+
+      - name: Next.js Production Build
+        run: npm run build
+
+      - name: Run Automated Test Suites (with live server for E2E)
+        run: |
+          npm run start &
+          node -e 'const s=Date.now();(async()=>{while(Date.now()-s<30000){try{const r=await fetch("http://localhost:3000/login");if(r.ok)process.exit(0);}catch(e){}await new Promise(r=>setTimeout(r,500));}process.exit(1);})()'
+          npm test
