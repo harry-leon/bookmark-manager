@@ -1,0 +1,239 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id          String       @id @default(cuid())
+  email       String       @unique
+  password    String?
+  name        String?
+  avatarUrl   String?      @map("avatar_url")
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+  packages    Package[]
+  tags        Tag[]
+  urls        Url[]
+  accounts    Account[]
+  notes       Note[]
+  attachments Attachment[]
+  tasks       Task[]
+
+  @@map("users")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String  @map("user_id")
+  type              String
+  provider          String
+  providerAccountId String  @map("provider_account_id")
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+  @@map("accounts")
+}
+
+model Package {
+  id          String    @id @default(cuid())
+  userId      String    @map("user_id")
+  parentId    String?   @map("parent_id")
+  name        String
+  description String?
+  icon        String    @default("Folder")
+  color       String    @default("#3b82f6")
+  sortOrder   Int       @default(0) @map("sort_order")
+  isFavorite  Boolean   @default(false) @map("is_favorite")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parent      Package?  @relation("PackageHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
+  children    Package[] @relation("PackageHierarchy")
+  sections    Section[]
+  urls        Url[]
+  tasks       Task[]
+
+  @@index([userId])
+  @@index([parentId])
+  @@index([sortOrder])
+  @@index([isFavorite])
+  @@map("packages")
+}
+
+model Section {
+  id          String   @id @default(cuid())
+  packageId   String   @map("package_id")
+  name        String
+  description String?
+  icon        String?  @default("FolderOpen")
+  sortOrder   Int      @default(0) @map("sort_order")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  package     Package  @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  urls        Url[]
+  tasks       Task[]
+
+  @@index([packageId])
+  @@index([sortOrder])
+  @@map("sections")
+}
+
+model Url {
+  id            String    @id @default(cuid())
+  userId        String    @map("user_id")
+  packageId     String    @map("package_id")
+  sectionId     String?   @map("section_id")
+  url           String
+  title         String
+  description   String?
+  faviconUrl    String?   @map("favicon_url")
+  isFavorite    Boolean   @default(false) @map("is_favorite")
+  sortOrder     Int       @default(0) @map("sort_order")
+  clickCount    Int       @default(0) @map("click_count")
+  lastVisitedAt DateTime? @map("last_visited_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  urlTags       UrlTag[]
+  notes         Note[]
+  tasks         Task[]
+  package       Package   @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  section       Section?  @relation(fields: [sectionId], references: [id])
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([packageId])
+  @@index([sectionId])
+  @@index([isFavorite])
+  @@index([url])
+  @@index([clickCount])
+  @@map("urls")
+}
+
+model Tag {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  name      String
+  color     String?  @default("#64748b")
+  createdAt DateTime @default(now()) @map("created_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  urlTags   UrlTag[]
+
+  @@unique([userId, name])
+  @@index([userId])
+  @@map("tags")
+}
+
+model UrlTag {
+  urlId String @map("url_id")
+  tagId String @map("tag_id")
+  tag   Tag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  url   Url    @relation(fields: [urlId], references: [id], onDelete: Cascade)
+
+  @@id([urlId, tagId])
+  @@index([urlId])
+  @@index([tagId])
+  @@map("url_tags")
+}
+
+model Note {
+  id          String       @id @default(cuid())
+  userId      String       @map("user_id")
+  urlId       String       @map("url_id")
+  title       String       @default("")
+  content     String       @default("") @db.Text
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  url         Url          @relation(fields: [urlId], references: [id], onDelete: Cascade)
+  attachments Attachment[]
+  tasks       Task[]
+
+  @@index([userId])
+  @@index([urlId])
+  @@map("notes")
+}
+
+model Attachment {
+  id               String   @id @default(cuid())
+  userId           String   @map("user_id")
+  noteId           String   @map("note_id")
+  storageKey       String   @unique @map("storage_key")
+  originalFilename String   @map("original_filename")
+  mimeType         String   @map("mime_type")
+  sizeBytes        Int      @map("size_bytes")
+  width            Int?
+  height           Int?
+  createdAt        DateTime @default(now()) @map("created_at")
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  note             Note     @relation(fields: [noteId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([noteId])
+  @@map("attachments")
+}
+
+model Task {
+  id             String       @id @default(cuid())
+  userId         String       @map("user_id")
+  title          String
+  description    String?      @db.Text
+  status         TaskStatus   @default(TODO)
+  priority       TaskPriority @default(MEDIUM)
+  dueAt          DateTime?    @map("due_at")
+  reminderAt     DateTime?    @map("reminder_at")
+  reminderSentAt DateTime?    @map("reminder_sent_at")
+  packageId      String?      @map("package_id")
+  sectionId      String?      @map("section_id")
+  urlId          String?      @map("url_id")
+  noteId         String?      @map("note_id")
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  package        Package?     @relation(fields: [packageId], references: [id], onDelete: SetNull)
+  section        Section?     @relation(fields: [sectionId], references: [id], onDelete: SetNull)
+  url            Url?         @relation(fields: [urlId], references: [id], onDelete: SetNull)
+  note           Note?        @relation(fields: [noteId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([status])
+  @@index([reminderAt])
+  @@index([dueAt])
+  @@map("tasks")
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  DONE
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  email     String
+  token     String   @unique
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([email])
+  @@index([token])
+  @@map("password_reset_tokens")
+}
